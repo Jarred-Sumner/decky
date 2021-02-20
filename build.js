@@ -21,7 +21,7 @@ build({
     });
   })
   .then(async (output) => {
-    console.log("Built static-decorators lib!");
+    console.log("Built decky lib!");
     output.warnings.forEach((w) => console.warn(w));
     require("rimraf").sync("./examples/**.js");
     require("rimraf").sync("./examples/**.json");

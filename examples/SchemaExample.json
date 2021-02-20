@@ -1,0 +1,19 @@
+{
+  "Person": {
+    "signUpTimestamp": {
+      "type": "number"
+    },
+    "lastName": {
+      "type": "string"
+    },
+    "firstName": {
+      "type": "string"
+    },
+    "username": {
+      "type": "string"
+    },
+    "id": {
+      "type": "number;"
+    }
+  }
+}

@@ -254,7 +254,7 @@ function onResolveStaticDecorators(args) {
   console.log("DECORATOR");
   return {
     path: args.path,
-    namespace: "static-decorators",
+    namespace: "decky",
   };
 }
 
@@ -337,12 +337,9 @@ export function plugin(decorators: DecoratorsMap, disable = false) {
         { filter: /\.(decorator|dec)\.(tsx)$/ },
         onResolveDecorator
       );
-      build.onResolve(
-        { filter: /^static-decorators$/ },
-        onResolveStaticDecorators
-      );
+      build.onResolve({ filter: /^decky$/ }, onResolveStaticDecorators);
       build.onLoad(
-        { filter: /^static-decorators$/, namespace: "static-decorators" },
+        { filter: /^decky$/, namespace: "decky" },
         onLoadStaticDecorators
       );
       build.onLoad(
@@ -361,15 +358,11 @@ export function plugin(decorators: DecoratorsMap, disable = false) {
 
 export function property<T extends any[] | undefined>(
   callback: DesignTimePropertyDecoratorFunction<T>
-) {
-  const paramsFunc = function (...args: T) {
-    return <any | void>{
-      callback,
-      type: DecoratorType.property,
-    };
+): (...args: T) => PropertyDecorator {
+  return <any | void>{
+    callback,
+    type: DecoratorType.property,
   };
-
-  return paramsFunc as (...args: T) => PropertyDecorator;
 }
 export function klass<T extends any[] | undefined>(
   callback: DesignTimeClassFunction<T>
