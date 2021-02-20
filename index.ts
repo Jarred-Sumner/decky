@@ -143,6 +143,11 @@ function buildDecoratorProcessor(decorators: DecoratorsMap) {
         let key = nextLine.substring(0, typeSeparatorIndex).trim();
         let typeName = nextLine.substring(typeSeparatorIndex + 1).trim();
 
+        let semicolonIndex = typeName.indexOf(";");
+        if (semicolonIndex > -1) {
+          typeName = typeName.substring(0, semicolonIndex);
+        }
+
         (result.code as any) = code;
         // TODO: object pooling
         const newCode = await (decoratorFunc as DesignTimePropertyDecoratorFunction<any>)(

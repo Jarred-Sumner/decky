@@ -13,7 +13,7 @@
       "type": "string"
     },
     "id": {
-      "type": "number;"
+      "type": "number"
     }
   }
 }
