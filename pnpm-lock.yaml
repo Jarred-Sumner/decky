@@ -1,11 +1,13 @@
 dependencies:
-  esbuild: 0.8.49
   fast-glob: 3.2.5
-  typescript: 4.2.0-beta
 devDependencies:
+  '@types/node': 14.14.31
   jest: 26.6.3
   rimraf: 3.0.2
+  typescript: 4.2.0-beta
 lockfileVersion: 5.2
+optionalDependencies:
+  esbuild: 0.8.49
 packages:
   /@babel/code-frame/7.12.13:
     dependencies:
@@ -1250,6 +1252,7 @@ packages:
   /esbuild/0.8.49:
     dev: false
     hasBin: true
+    optional: true
     requiresBuild: true
     resolution:
       integrity: sha512-itiFVYv5UZz4NooO7/Y0bRGVDGz/M/cxKbl6zyNI5pnKaz1mZjvZXAFhhDVz6rGCmcdTKj5oag6rh8DaaSSmfQ==
@@ -3667,7 +3670,7 @@ packages:
     resolution:
       integrity: sha512-zdu8XMNEDepKKR+XYOXAVPtWui0ly0NtohUscw+UmaHiAWT8hrV1rr//H6V+0DvJ3OQ19S979M0laLfX8rm82Q==
   /typescript/4.2.0-beta:
-    dev: false
+    dev: true
     engines:
       node: '>=4.2.0'
     hasBin: true
@@ -3907,6 +3910,7 @@ packages:
     resolution:
       integrity: sha512-aePbxDmcYW++PaqBsJ+HYUFwCdv4LVvdnhBy78E57PIor8/OVvhMrADFFEDh8DHDFRv/O9i3lPhsENjO7QX0+A==
 specifiers:
+  '@types/node': ^14.14.31
   esbuild: ^0.8.49
   fast-glob: ^3.2.5
   jest: ^26.6.3

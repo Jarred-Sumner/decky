@@ -9,7 +9,7 @@ export enum DecoratorType {
 }
 
 export async function build(
-  decoratorGlob = "./**/*.{decorator.ts,dec.ts,decorators.ts}",
+  decoratorGlob = "./**/*.{decorator.ts,dec.ts,decorators.ts,decky.ts}",
   additionalConfig: Partial<esbuild.BuildOptions> = {}
 ) {
   const entryPoints = !additionalConfig?.entryPoints?.length
