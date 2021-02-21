@@ -92,7 +92,7 @@ You'd get this instead:
     }
   }
 }
-````
+```
 
 ### Writing decorators
 
@@ -143,3 +143,4 @@ You can use decky to edit code at build-time or for generating metadata for code
 #### Class Decorator:
 
 TODO example
+````
