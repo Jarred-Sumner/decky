@@ -55,7 +55,7 @@ type Person {
 }
 ```
 
-To the bundler, there are no decorators. Zero-runtime.
+To the bundler, there are no decorators. This adds 0 to your bundle size.
 
 ```ts
 export class Person {
@@ -65,7 +65,7 @@ export class Person {
 }
 ```
 
-What if we wanted JSON Schema instead of GraphQL? Well, if the interface is the same but you had a [`JSONSchema.decorator`](./examples/JSONSchema.decorator):
+What if we wanted JSON Schema instead of GraphQL? If the interface was the same but you had a [`JSONSchema.decorator`](./examples/JSONSchema.decorator):
 
 ```patch
 +import { auto, field, type } from "./GraphQLSchema.decorator";
@@ -77,7 +77,7 @@ export class Person {
 
 ```
 
-You'd get this instead:
+You'd get this:
 
 ```json
 {
