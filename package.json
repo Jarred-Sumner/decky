@@ -1,5 +1,25 @@
 {
   "name": "decky",
+  "version": "1.0.0",
+  "keywords": [
+    "typescript",
+    "experimentalDecorators",
+    "decorators",
+    "esbuild",
+    "esbuild-plugin",
+    "webpack",
+    "compiler",
+    "build",
+    "bundle",
+    "bundler",
+    "experimental-decorators",
+    "emitDecoratorMetadata",
+    "types"
+  ],
+  "description": "Use experimental decorators with zero runtime overhead.",
+  "author": "@jarred-sumner",
+  "repository": "https://github.com/jarred-sumner/decky",
+  "homepage": "https://github.com/jarred-sumner/decky",
   "scripts": {
     "build": "node build.js"
   },
