@@ -55,7 +55,7 @@ type Person {
 }
 ```
 
-To the bundler, there are no decorators. This adds 0 to your bundle size.
+To the bundler, there are no decorators. They're removed at build-time.
 
 ```ts
 export class Person {
