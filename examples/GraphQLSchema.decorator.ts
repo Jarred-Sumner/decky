@@ -5,8 +5,9 @@ type SchemaType = "number" | "string" | "boolean" | "ID";
 
 type SchemaMap = {
   [key: string]: {
-    type: SchemaType;
+    type?: SchemaType;
     description?: string;
+    required?: boolean;
   };
 };
 
@@ -37,20 +38,40 @@ export const field = property<OptionalPropType>(
   }
 );
 
-export const auto = propertyVoid(({ key, type, metadata: { filePath } }) => {
-  if (!schemaFileMap[filePath]) {
-    schemaFileMap[filePath] = {};
-  }
-  const schema = schemaFileMap[filePath];
+export const auto = propertyVoid(
+  ({ key, type, metadata: { filePath, code } }) => {
+    if (!schemaFileMap[filePath]) {
+      schemaFileMap[filePath] = {};
+    }
+    const schema = schemaFileMap[filePath];
 
-  if (type !== "number" && type !== "string" && type !== "boolean") {
-    throw `Invalid or missing type definition at ${type}`;
-  }
+    if (type !== "number" && type !== "string" && type !== "boolean") {
+      throw `Invalid or missing type definition\n\n${code}`;
+    }
 
-  schema[key] = {
-    type: type as SchemaType,
-  };
-});
+    schema[key] = {
+      type: type as SchemaType,
+    };
+  }
+);
+
+export const required = propertyVoid(
+  ({ key, type, metadata: { filePath } }) => {
+    if (!schemaFileMap[filePath]) {
+      schemaFileMap[filePath] = {};
+    }
+    const schema = schemaFileMap[filePath];
+    console.assert(key, "property name must exist");
+
+    if (!schema[key]) {
+      schema[key] = {
+        required: true,
+      };
+    } else {
+      schema[key].required = true;
+    }
+  }
+);
 
 export const type = klass<[string] | undefined>(
   async ({ args: [object], metadata: { filePath } }) => {
@@ -61,9 +82,13 @@ export const type = klass<[string] | undefined>(
     const schemaFile = filePath.replace(".ts", ".graphql");
     const map = schemaFileMap[filePath];
     const stringifyField = (key: string) => {
-      const { type, description } = map[key];
+      const { type, description, required = false } = map[key];
 
       let content: string = `  ${key}: ${type}`;
+      if (required) {
+        content += "!";
+      }
+
       if (description) {
         content = `  # ${description}\n` + content;
       }
@@ -85,4 +110,4 @@ ${Object.keys(map).map(stringifyField).join("\n")}
   }
 );
 
-export const decorators = { auto, field, type };
+export const decorators = { auto, field, type, required };
