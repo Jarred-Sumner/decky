@@ -67,7 +67,7 @@ export class Person {
 }
 ```
 
-What if we wanted JSON Schema instead of GraphQL? If the interface was the same but you had a [`JSONSchema.decorator`](./examples/JSONSchema.decorator):
+What if we wanted JSON Schema instead of GraphQL? If the interface was the same but you had a [`JSONSchema.decorator`](./examples/JSONSchema.decorator.ts):
 
 ```patch
 +import { auto, field, type } from "./GraphQLSchema.decorator";
