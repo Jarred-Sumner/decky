@@ -1,22 +1,19 @@
 import * as esbuild from "esbuild";
-import fs from "fs";
 import glob from "fast-glob";
-import path from "path";
 
 export enum DecoratorType {
   property = 0,
   klass = 1,
 }
 
-export async function build(
+export async function decorators(
   decoratorGlob = "./**/*.{decorator.ts,dec.ts,decorators.ts,decky.ts}",
   additionalConfig: Partial<esbuild.BuildOptions> = {}
-) {
+): Promise<string[]> {
   const entryPoints = !additionalConfig?.entryPoints?.length
     ? await glob(decoratorGlob)
     : additionalConfig.entryPoints;
 
-  console.log({ entryPoints });
   await esbuild.build({
     minify: false,
     minifySyntax: true,
@@ -29,4 +26,6 @@ export async function build(
     entryPoints,
     bundle: false,
   });
+
+  return entryPoints;
 }

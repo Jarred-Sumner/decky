@@ -1,7 +1,6 @@
+import { BuildOptions, OnLoadResult, PartialNote } from "esbuild";
 import fs from "fs";
-import path from "path";
-import { DecoratorType } from "./declarations";
-import { BuildResult, OnLoadResult, PartialNote } from "esbuild";
+import { DecoratorType } from "./decorators";
 type Qualifier = "public" | "private" | "protected" | null;
 
 type DesignTimeProperty<T = any[]> = {
@@ -32,9 +31,11 @@ type DesignTimeClassFunction<T> = (klass: DesignTimeClass<T>) => void | any;
 export type DesignTimeClassDecorator<T> = () => DesignTimeClassFunction<T>;
 
 export type DecoratorsMap = {
-  [name: string]:
-    | DesignTimePropertyDecorator<any>
-    | DesignTimeClassDecorator<any>;
+  [modulePath: string]: {
+    [name: string]:
+      | DesignTimePropertyDecorator<any>
+      | DesignTimeClassDecorator<any>;
+  };
 };
 
 interface DecoratorResult {
@@ -314,7 +315,6 @@ function buildDecoratorProcessor(decorators: DecoratorsMap) {
 }
 
 function onResolveDecorator(args) {
-  console.log("DECORATOR");
   return {
     path: args.path,
     namespace: "decorator-stub",
@@ -322,7 +322,6 @@ function onResolveDecorator(args) {
 }
 
 function onResolveStaticDecorators(args) {
-  console.log("DECORATOR");
   return {
     path: args.path,
     namespace: "decky",
@@ -343,7 +342,7 @@ function onLoadStaticDecorators(args) {
   };
 }
 
-export function plugin(decorators: DecoratorsMap, disable = false) {
+export function plugin(decorators: DecoratorsMap) {
   const { prefixes, process } = buildDecoratorProcessor(decorators);
 
   function isPotentialMatch(content: string) {
@@ -461,6 +460,7 @@ export function propertyVoid(
 }
 
 export { property as p, propertyVoid as pV };
+export { klass as c };
 
 export function klass<T extends any[] = []>(
   callback: DesignTimeClassFunction<T>
@@ -471,4 +471,16 @@ export function klass<T extends any[] = []>(
   };
 }
 
-export { klass as c };
+export async function load(
+  decoratorsGlob?: string,
+  additionalConfig?: Partial<BuildOptions>
+) {
+  const { decorators } = require("./decorators");
+  const entryPoints = await decorators(decoratorsGlob, additionalConfig);
+  const files = {};
+  for (let file of entryPoints) {
+    Object.assign(files, require(file).decorators);
+  }
+
+  return plugin(files);
+}

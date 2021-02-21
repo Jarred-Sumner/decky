@@ -12,7 +12,7 @@ build({
   .then(() => {
     return build({
       platform: "node",
-      entryPoints: ["./declarations"],
+      entryPoints: ["./decorators"],
       outdir: ".",
       minify: false,
       minifySyntax: true,
@@ -26,7 +26,7 @@ build({
     require("rimraf").sync("./examples/**.js");
     require("rimraf").sync("./examples/**.json");
     const { plugin } = require("./index.js");
-    const { build: buildDecorators } = require("./declarations");
+    const { decorators: buildDecorators } = require("./decorators");
 
     console.log("Building example decorators...");
     await buildDecorators();
