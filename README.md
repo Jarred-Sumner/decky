@@ -2,6 +2,8 @@
 
 Use experimental decorators with zero runtime cost and without increasing your bundle size.
 
+decky strives for full compatiblity with TypeScript, Prettier, and the rest of the JavaScript ecosystem.
+
 ## Installation
 
 `decky` is an esbuild plugin.
@@ -98,7 +100,7 @@ You'd get this instead:
 
 Decorators are run at build-time. This uses a handcrafted bespoke not-JavaScript AST. The syntax looks like decorators enough to fool TypeScript's type checker, but under the hood, its entirely different.
 
-Most importantly, decky strives for full compatible with TypeScript, Prettier, and the rest of the JavaScript ecosystem. Decorator imports are removed during tree-shaking, leaving no trace.
+Decorator imports are removed during tree-shaking, leaving no trace.
 
 By default, files that write new decorators need to end in any of these extensions:
 
