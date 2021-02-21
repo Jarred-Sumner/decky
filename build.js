@@ -9,6 +9,20 @@ build({
   format: "cjs",
   sourcemap: "both",
 })
+  .then(() =>
+    build({
+      platform: "node",
+      entryPoints: ["./index"],
+      outdir: ".",
+      minify: false,
+      minifySyntax: true,
+      format: "esm",
+      outExtension: {
+        ".js": ".mjs",
+      },
+      sourcemap: "both",
+    })
+  )
   .then(() => {
     return build({
       platform: "node",
@@ -17,6 +31,20 @@ build({
       minify: false,
       minifySyntax: true,
       format: "cjs",
+      sourcemap: "both",
+    });
+  })
+  .then(() => {
+    return build({
+      platform: "node",
+      entryPoints: ["./decorators"],
+      outdir: ".",
+      minify: false,
+      minifySyntax: true,
+      format: "esm",
+      outExtension: {
+        ".js": ".mjs",
+      },
       sourcemap: "both",
     });
   })

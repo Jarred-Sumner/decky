@@ -1,7 +1,7 @@
 import { BuildOptions, OnLoadResult, PartialNote } from "esbuild";
-import fs from "fs";
+import * as fs from "fs";
 import { DecoratorType } from "./decorators";
-import path from "path";
+import * as path from "path";
 type Qualifier = "public" | "private" | "protected" | null;
 
 type DesignTimeProperty<T = any[]> = {
@@ -50,7 +50,7 @@ interface DecoratorResult {
 type DecoratorProcessor = (
   prefixStart: number,
   result: DecoratorResult
-) => boolean;
+) => Promise<boolean>;
 
 function trim(input: string) {
   return input.trim();
@@ -372,7 +372,7 @@ export function plugin(decorators: DecoratorsMap) {
 
   function isPotentialMatch(content: string) {
     for (let prefix of prefixes) {
-      if (content.includes(prefix)) return true;
+      if (content.includes(prefix as string)) return true;
     }
 
     return false;

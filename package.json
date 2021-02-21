@@ -1,6 +1,6 @@
 {
   "name": "decky",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "keywords": [
     "typescript",
     "experimentalDecorators",
@@ -16,17 +16,25 @@
     "emitDecoratorMetadata",
     "types"
   ],
+  "types": "./types.d.ts",
   "description": "Use experimental decorators with zero runtime overhead.",
   "author": "@jarred-sumner",
+  "module": "./index.mjs",
   "repository": "https://github.com/jarred-sumner/decky",
   "homepage": "https://github.com/jarred-sumner/decky",
   "scripts": {
-    "build": "node build.js"
+    "build": "node build.js",
+    "types": "tsc --esModuleInterop --downlevelIteration --emitDeclarationOnly --declaration index.ts decorators.ts"
   },
   "main": "./index.js",
   "files": [
-    "./index",
-    "./decorators"
+    "index",
+    "index.mjs",
+    "index.d.ts",
+    "decorators.d.ts",
+    "decorators",
+    "decorators.mjs",
+    "types.d.ts"
   ],
   "dependencies": {
     "fast-glob": "^3.2.5"

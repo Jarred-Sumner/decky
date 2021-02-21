@@ -11,7 +11,7 @@ export async function decorators(
   additionalConfig: Partial<esbuild.BuildOptions> = {}
 ): Promise<string[]> {
   const entryPoints = !additionalConfig?.entryPoints?.length
-    ? await glob(decoratorGlob)
+    ? await (glob as any)(decoratorGlob)
     : additionalConfig.entryPoints;
 
   await esbuild.build({
