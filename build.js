@@ -31,7 +31,7 @@ build({
     console.log("Building example decorators...");
     await buildDecorators();
 
-    for (let entryPoint of ["./examples/SchemaExample.ts"]) {
+    for (let entryPoint of ["./examples/JSONSchema.ts"]) {
       const outfile = require("path").join(
         process.cwd(),
         entryPoint.replace(".ts", ".decorator.js")

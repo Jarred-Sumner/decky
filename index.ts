@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { DecoratorType } from "./declarations";
-
+import { BuildResult, OnLoadResult, PartialNote } from "esbuild";
 type Qualifier = "public" | "private" | "protected" | null;
 
 type DesignTimeProperty<T = any[]> = {
@@ -54,6 +54,29 @@ function trim(input: string) {
   return input.trim();
 }
 
+class ProcessorError extends Error {
+  constructor(
+    message: string,
+    file: string,
+    lineNumber: number,
+    lineText: string,
+    column?: number
+  ) {
+    super(message);
+    this.note = {
+      text: message,
+      location: {
+        file,
+        line: lineNumber,
+        lineText,
+
+        column,
+      },
+    };
+  }
+  note: PartialNote;
+}
+
 function buildDecoratorProcessor(decorators: DecoratorsMap) {
   const decoratorKeys = Object.keys(decorators).sort().reverse();
   const decoratorPrefixes = decoratorKeys.map((a) => a.toString());
@@ -83,15 +106,39 @@ function buildDecoratorProcessor(decorators: DecoratorsMap) {
       let argEnd = -1;
       let argList;
       if (code[argStart++] === "(") {
-        argStart++;
         argEnd = code.indexOf(")", argStart);
-        argEnd--;
-        if (argEnd < 0)
-          throw `Missing ) for ${prefix} at ${path.basename(result.filePath)}:${
-            result.code.substring(0, prefixStart).split("\n").length
-          }`;
+        if (argEnd - 1 > argStart) {
+          if (argEnd < 0)
+            throw new ProcessorError(
+              `Missing ) for ${prefix}`,
+              result.filePath,
+              result.code.substring(0, prefixStart).split("\n").length,
+              result.code.split("\n")[
+                result.code.substring(0, prefixStart).split("\n").length
+              ],
+              prefixEnd
+            );
 
-        argList = code.substring(argStart, argEnd).split(",").map(trim);
+          try {
+            argList = JSON.parse("[" + code.substring(argStart, argEnd) + "]");
+          } catch (exception) {
+            throw new ProcessorError(
+              `Arguments to ${prefix} must be JSON. Received: [${code.substring(
+                argStart,
+                argEnd
+              )}]`,
+              result.filePath,
+              result.code.substring(0, prefixStart).split("\n").length - 1,
+              result.code.split("\n")[
+                result.code.substring(0, prefixStart).split("\n").length - 1
+              ],
+              argStart
+            );
+          }
+        } else {
+          argStart = -1;
+          argList = [];
+        }
       } else {
         argStart = -1;
         argList = [];
@@ -182,7 +229,7 @@ function buildDecoratorProcessor(decorators: DecoratorsMap) {
       let startIndex = -1;
       let symbolI = code.lastIndexOf("@") - 1;
       let _prefixI = -1;
-      if (symbolI < -1) return code;
+      if (symbolI < -1) return { contents: code, note: null };
       if (symbolI < 0) symbolI = 0;
 
       let result = {
@@ -208,7 +255,24 @@ function buildDecoratorProcessor(decorators: DecoratorsMap) {
         prefix = decoratorPrefixes[prefixI];
         if (result.startIndex > -1) {
           let _code = result.code;
-          if (await decoratorFunctions[prefixI](result.startIndex, result)) {
+          let didChange = false;
+          try {
+            didChange = await decoratorFunctions[prefixI](
+              result.startIndex,
+              result
+            );
+          } catch (exception) {
+            if (exception instanceof ProcessorError) {
+              return {
+                contents: "",
+                note: exception.note,
+              };
+            } else {
+              throw exception;
+            }
+          }
+
+          if (didChange) {
             if (result.startIndex > -1 && result.stopIndex > -1) {
               result.code =
                 _code.substring(0, result.startIndex) +
@@ -240,8 +304,10 @@ function buildDecoratorProcessor(decorators: DecoratorsMap) {
         }
       }
 
-      console.log(result.code);
-      return result.code;
+      return {
+        contents: result.code,
+        note: null,
+      };
     },
     prefixes: decoratorPrefixes,
   };
@@ -302,21 +368,26 @@ export function plugin(decorators: DecoratorsMap, disable = false) {
     };
   }
 
-  async function onLoadTSX(args) {
-    const contents: string = await fs.promises.readFile(args.path, "utf8");
+  async function onLoadTSX(args): Promise<OnLoadResult> {
+    let contents: string = await fs.promises.readFile(args.path, "utf8");
     if (!isPotentialMatch(contents))
       return {
         contents,
         loader: "tsx",
       };
 
+    const { note, contents: _contents } = await process(contents, args.path);
+
     return {
-      contents: await process(contents, args.path),
+      contents: _contents,
+      errors: note
+        ? [{ location: note.location, detail: note.text }]
+        : undefined,
       loader: "tsx",
     };
   }
 
-  async function onLoadTS(args) {
+  async function onLoadTS(args): Promise<OnLoadResult> {
     console.log("LOAD", args.path);
     const contents: string = await fs.promises.readFile(args.path, "utf8");
     if (!isPotentialMatch(contents))
@@ -325,8 +396,11 @@ export function plugin(decorators: DecoratorsMap, disable = false) {
         loader: "ts",
       };
 
+    const { note, contents: _contents } = await process(contents, args.path);
+
     return {
-      contents: await process(contents, args.path),
+      contents: _contents,
+      errors: note ? [{ location: note.location, text: note.text }] : undefined,
       loader: "ts",
     };
   }
@@ -361,15 +435,34 @@ export function plugin(decorators: DecoratorsMap, disable = false) {
   };
 }
 
-export function property<T extends any[] | undefined>(
+type OptionalPropertyDescriptor<T> = T extends Exclude<
+  (number | string)[],
+  undefined
+>
+  ? (...args: T) => PropertyDecorator
+  : void;
+
+export function property<T>(
   callback: DesignTimePropertyDecoratorFunction<T>
-): (...args: T) => PropertyDecorator {
-  return <any | void>{
+): OptionalPropertyDescriptor<T> {
+  return {
     callback,
     type: DecoratorType.property,
-  };
+  } as any;
 }
-export function klass<T extends any[] | undefined>(
+
+export function propertyVoid(
+  callback: DesignTimePropertyDecoratorFunction<never>
+): PropertyDecorator {
+  return {
+    callback,
+    type: DecoratorType.property,
+  } as any;
+}
+
+export { property as p, propertyVoid as pV };
+
+export function klass<T extends any[] = []>(
   callback: DesignTimeClassFunction<T>
 ): (...args: T) => ClassDecorator {
   return <any | void>{
@@ -377,3 +470,5 @@ export function klass<T extends any[] | undefined>(
     type: DecoratorType.klass,
   };
 }
+
+export { klass as c };
