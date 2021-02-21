@@ -13,10 +13,11 @@
     "bundle",
     "bundler",
     "experimental-decorators",
+    "designDecorators",
+    "design-time-decorators",
     "emitDecoratorMetadata",
     "types"
   ],
-  "types": "./types.d.ts",
   "description": "Use experimental decorators with zero runtime overhead.",
   "author": "@jarred-sumner",
   "module": "./index.mjs",
@@ -24,7 +25,7 @@
   "homepage": "https://github.com/jarred-sumner/decky",
   "scripts": {
     "build": "node build.js",
-    "types": "tsc --esModuleInterop --downlevelIteration --emitDeclarationOnly --declaration index.ts decorators.ts"
+    "types": "tsc -p ./tsconfig.build.json"
   },
   "main": "./index.js",
   "files": [

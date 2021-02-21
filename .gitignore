@@ -9,3 +9,5 @@ examples/**.js
 **/*.map
 **/.DS_Store
 .DS_Store
+/examples/*.d.ts
+*.tsbuildinfo

@@ -1,6 +1,6 @@
 import { BuildOptions, OnLoadResult, PartialNote } from "esbuild";
 import * as fs from "fs";
-import { DecoratorType } from "./decorators";
+import { DecoratorType, decorators } from "decky/decorators";
 import * as path from "path";
 type Qualifier = "public" | "private" | "protected" | null;
 
@@ -501,7 +501,6 @@ export async function load(
   decoratorsGlob?: string,
   additionalConfig?: Partial<BuildOptions>
 ) {
-  const { decorators } = require("./decorators");
   const entryPoints = await decorators(decoratorsGlob, additionalConfig);
   const files = {};
   for (let file of entryPoints) {
