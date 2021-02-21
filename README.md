@@ -49,3 +49,4 @@ export class Person {
 ```
 
 That `JSONSchema.decorator` file looks like this:
+https://github.com/Jarred-Sumner/decky/blob/cb85d5a10c7cb9330d2acce3dd78049c3dc65970/examples/JSONSchema.decorator.ts#L18-77
