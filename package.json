@@ -1,6 +1,6 @@
 {
   "name": "decky",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "keywords": [
     "typescript",
     "experimentalDecorators",
@@ -28,7 +28,7 @@
   },
   "main": "./index.js",
   "files": [
-    "index",
+    "index.js",
     "index.mjs",
     "index.d.ts",
     "decorators.d.ts",
