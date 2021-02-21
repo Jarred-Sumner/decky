@@ -195,12 +195,24 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
 
         if (isClass) {
           nextLine = nextLine.substring("class ".length);
-          // TODO: object pooling
-          await (decoratorFunc as DesignTimeClassFunction<any>)({
-            className: nextLine.substring(0, nextLine.indexOf(" ")),
-            args: argList,
-            metadata: result,
-          } as DesignTimeClass);
+          try {
+            // TODO: object pooling
+            await (decoratorFunc as DesignTimeClassFunction<any>)({
+              className: nextLine.substring(0, nextLine.indexOf(" ")),
+              args: argList,
+              metadata: result,
+            } as DesignTimeClass);
+          } catch (exception) {
+            throw new ProcessorError(
+              exception.toString() + `\nIn file:\n${result.code}`,
+              result.filePath,
+              result.code.substring(0, prefixStart).split("\n").length,
+              result.code.split("\n")[
+                result.code.substring(0, prefixStart).split("\n").length
+              ],
+              prefixEnd
+            );
+          }
           return false;
         } else {
           // let colon
@@ -213,18 +225,43 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
             typeName = typeName.substring(0, semicolonIndex);
           }
 
+          if (key === "") {
+            throw new ProcessorError(
+              "Missing name for property below property descriptor",
+              result.filePath,
+              result.code.substring(0, prefixStart).split("\n").length,
+              result.code.split("\n")[
+                result.code.substring(0, prefixStart).split("\n").length + 1
+              ],
+              prefixEnd
+            );
+          }
+
           (result.code as any) = code;
           // TODO: object pooling
-          const newCode = await (decoratorFunc as DesignTimePropertyDecoratorFunction<any>)(
-            {
-              key,
-              type: typeName,
-              args: argList,
-              isStatic,
-              qualifier,
-              metadata: result,
-            }
-          );
+          let newCode: string;
+          try {
+            newCode = await (decoratorFunc as DesignTimePropertyDecoratorFunction<any>)(
+              {
+                key,
+                type: typeName,
+                args: argList,
+                isStatic,
+                qualifier,
+                metadata: result,
+              }
+            );
+          } catch (exception) {
+            throw new ProcessorError(
+              exception.toString() + `\nIn file:\n${result.code}`,
+              result.filePath,
+              result.code.substring(0, prefixStart).split("\n").length,
+              result.code.split("\n")[
+                result.code.substring(0, prefixStart).split("\n").length
+              ],
+              prefixEnd
+            );
+          }
           if (!newCode && newCode !== "") {
             (result.startIndex as any) = prefixStart;
             (result.stopIndex as any) = prefixEnd;
