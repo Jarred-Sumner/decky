@@ -1,6 +1,6 @@
 {
   "name": "decky",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "keywords": [
     "typescript",
     "experimentalDecorators",
@@ -20,14 +20,14 @@
   ],
   "description": "Use experimental decorators with zero runtime overhead.",
   "author": "@jarred-sumner",
-  "module": "./index.mjs",
+  "module": "index.mjs",
   "repository": "https://github.com/jarred-sumner/decky",
   "homepage": "https://github.com/jarred-sumner/decky",
   "scripts": {
     "build": "node build.js",
     "types": "tsc -p ./tsconfig.build.json"
   },
-  "main": "./index.js",
+  "main": "index.js",
   "files": [
     "index.js",
     "index.mjs",
