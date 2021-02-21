@@ -84,6 +84,16 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
   const allPrefixes = new Set();
   for (let moduleName in decoratorsModuleMap) {
     const decorators = decoratorsModuleMap[moduleName];
+    if (
+      typeof decorators !== "object" ||
+      Object.keys(decorators).length === 0
+    ) {
+      console.warn(
+        `[decky] "decorators" not exported in ${moduleName}, ignoring file.`
+      );
+      continue;
+    }
+
     const decoratorKeys = Object.keys(decorators).sort().reverse();
     const decoratorPrefixes = decoratorKeys.map((a) => a.toString());
     const decoratorFunctions: Array<DecoratorProcessor> = new Array(
@@ -431,7 +441,7 @@ export function plugin(decorators: DecoratorsMap) {
   }
 
   return {
-    name: "design-time-decorators",
+    name: "decky",
     setup(build) {
       build.onResolve(
         { filter: /\.(decorator|dec)\.(ts)$/ },
