@@ -65,7 +65,7 @@ export class Person {
 
 What if we wanted GraphQL instead of JSON Schema? Well, if the interface is the same but you had a [`JSONSchema.decorator`](./examples/JSONSchema.decorator):
 
-````patch
+```patch
 +import { auto, field, type } from "./GraphQLSchema.decorator";
 -import { auto, field, type } from "./JSONSchema.decorator";
 
@@ -143,4 +143,7 @@ You can use decky to edit code at build-time or for generating metadata for code
 #### Class Decorator:
 
 TODO example
-````
+
+```
+
+```
