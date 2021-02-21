@@ -1,6 +1,7 @@
 import { BuildOptions, OnLoadResult, PartialNote } from "esbuild";
 import fs from "fs";
 import { DecoratorType } from "./decorators";
+import path from "path";
 type Qualifier = "public" | "private" | "protected" | null;
 
 type DesignTimeProperty<T = any[]> = {
@@ -78,223 +79,192 @@ class ProcessorError extends Error {
   note: PartialNote;
 }
 
-function buildDecoratorProcessor(decorators: DecoratorsMap) {
-  const decoratorKeys = Object.keys(decorators).sort().reverse();
-  const decoratorPrefixes = decoratorKeys.map((a) => a.toString());
-  const decoratorFunctions: Array<DecoratorProcessor> = new Array(
-    decoratorKeys.length
-  );
-  const flattenedFuncs = decoratorKeys.map(
-    (a) => (decorators[a] as any).callback
-  );
+function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
+  const fileMapping = {};
+  const allPrefixes = new Set();
+  for (let moduleName in decoratorsModuleMap) {
+    const decorators = decoratorsModuleMap[moduleName];
+    const decoratorKeys = Object.keys(decorators).sort().reverse();
+    const decoratorPrefixes = decoratorKeys.map((a) => a.toString());
+    const decoratorFunctions: Array<DecoratorProcessor> = new Array(
+      decoratorKeys.length
+    );
+    const flattenedFuncs = decoratorKeys.map(
+      (a) => (decorators[a] as any).callback
+    );
 
-  for (let i = 0; i < decoratorKeys.length; i++) {
-    const key = decoratorKeys[i];
-    const prefix = decoratorPrefixes[i];
-    const length = key.length;
-    const decoratorFunc:
-      | DesignTimeClassFunction<any>
-      | DesignTimePropertyDecoratorFunction<any> = flattenedFuncs[i];
+    for (let i = 0; i < decoratorKeys.length; i++) {
+      const key = decoratorKeys[i];
+      const prefix = decoratorPrefixes[i];
+      const length = key.length;
+      const decoratorFunc:
+        | DesignTimeClassFunction<any>
+        | DesignTimePropertyDecoratorFunction<any> = flattenedFuncs[i];
 
-    const processDecorator: DecoratorProcessor = async (
-      prefixStart,
-      result
-    ) => {
-      let code = result.code;
-      let prefixEnd = prefixStart + length;
-      let argStart = prefixEnd;
-      let lineEnd = code.indexOf("\n", prefixStart);
-      let argEnd = -1;
-      let argList;
-      if (code[argStart++] === "(") {
-        argEnd = code.indexOf(")", argStart);
-        if (argEnd - 1 > argStart) {
-          if (argEnd < 0)
-            throw new ProcessorError(
-              `Missing ) for ${prefix}`,
-              result.filePath,
-              result.code.substring(0, prefixStart).split("\n").length,
-              result.code.split("\n")[
-                result.code.substring(0, prefixStart).split("\n").length
-              ],
-              prefixEnd
-            );
+      const processDecorator: DecoratorProcessor = async (
+        prefixStart,
+        result
+      ) => {
+        let code = result.code;
+        let prefixEnd = prefixStart + length;
+        let argStart = prefixEnd;
+        let lineEnd = code.indexOf("\n", prefixStart);
+        let argEnd = -1;
+        let argList;
+        if (code[argStart++] === "(") {
+          argEnd = code.indexOf(")", argStart);
+          if (argEnd - 1 > argStart) {
+            if (argEnd < 0)
+              throw new ProcessorError(
+                `Missing ) for ${prefix}`,
+                result.filePath,
+                result.code.substring(0, prefixStart).split("\n").length,
+                result.code.split("\n")[
+                  result.code.substring(0, prefixStart).split("\n").length
+                ],
+                prefixEnd
+              );
 
-          try {
-            argList = JSON.parse("[" + code.substring(argStart, argEnd) + "]");
-          } catch (exception) {
-            throw new ProcessorError(
-              `Arguments to ${prefix} must be JSON. Received: [${code.substring(
-                argStart,
-                argEnd
-              )}]`,
-              result.filePath,
-              result.code.substring(0, prefixStart).split("\n").length - 1,
-              result.code.split("\n")[
-                result.code.substring(0, prefixStart).split("\n").length - 1
-              ],
-              argStart
-            );
+            try {
+              argList = JSON.parse(
+                "[" + code.substring(argStart, argEnd) + "]"
+              );
+            } catch (exception) {
+              throw new ProcessorError(
+                `Arguments to ${prefix} must be JSON. Received: [${code.substring(
+                  argStart,
+                  argEnd
+                )}]`,
+                result.filePath,
+                result.code.substring(0, prefixStart).split("\n").length - 1,
+                result.code.split("\n")[
+                  result.code.substring(0, prefixStart).split("\n").length - 1
+                ],
+                argStart
+              );
+            }
+          } else {
+            argStart = -1;
+            argList = [];
           }
         } else {
           argStart = -1;
           argList = [];
         }
-      } else {
-        argStart = -1;
-        argList = [];
-      }
-      let nextLineStart = lineEnd + 1;
-      let nextLineEnd = code.indexOf("\n", nextLineStart);
-      const originalLine = code.substring(nextLineStart, nextLineEnd).trim();
-      let nextLine = originalLine;
-      let isStatic = false;
-      let qualifier: Qualifier = null;
+        let nextLineStart = lineEnd + 1;
+        let nextLineEnd = code.indexOf("\n", nextLineStart);
+        const originalLine = code.substring(nextLineStart, nextLineEnd).trim();
+        let nextLine = originalLine;
+        let isStatic = false;
+        let qualifier: Qualifier = null;
 
-      if (nextLine.startsWith("export ")) {
-        nextLine = nextLine.substring("export ".length).trim();
-      }
-
-      if (nextLine.startsWith("public ")) {
-        qualifier = "public";
-        nextLine = nextLine.substring("public".length);
-      } else if (nextLine.startsWith("private ")) {
-        qualifier = "private";
-        nextLine = nextLine.substring("private".length);
-      } else if (nextLine.startsWith("protected ")) {
-        qualifier = "protected";
-        nextLine = nextLine.substring("protected".length);
-      }
-
-      nextLine = nextLine.trim();
-      let isClass = nextLine.startsWith("class ");
-
-      if (!isClass) {
-        isStatic = nextLine.startsWith("static ");
-        if (isStatic) {
-          nextLine.substring("static ".length);
-        }
-      }
-
-      if (isClass) {
-        nextLine = nextLine.substring("class ".length);
-        // TODO: object pooling
-        await (decoratorFunc as DesignTimeClassFunction<any>)({
-          className: nextLine.substring(0, nextLine.indexOf(" ")),
-          args: argList,
-          metadata: result,
-        } as DesignTimeClass);
-        return false;
-      } else {
-        // let colon
-        let typeSeparatorIndex = nextLine.indexOf(":");
-        let key = nextLine.substring(0, typeSeparatorIndex).trim();
-        let typeName = nextLine.substring(typeSeparatorIndex + 1).trim();
-
-        let semicolonIndex = typeName.indexOf(";");
-        if (semicolonIndex > -1) {
-          typeName = typeName.substring(0, semicolonIndex);
+        if (nextLine.startsWith("export ")) {
+          nextLine = nextLine.substring("export ".length).trim();
         }
 
-        (result.code as any) = code;
-        // TODO: object pooling
-        const newCode = await (decoratorFunc as DesignTimePropertyDecoratorFunction<any>)(
-          {
-            key,
-            type: typeName,
-            args: argList,
-            isStatic,
-            qualifier,
-            metadata: result,
+        if (nextLine.startsWith("public ")) {
+          qualifier = "public";
+          nextLine = nextLine.substring("public".length);
+        } else if (nextLine.startsWith("private ")) {
+          qualifier = "private";
+          nextLine = nextLine.substring("private".length);
+        } else if (nextLine.startsWith("protected ")) {
+          qualifier = "protected";
+          nextLine = nextLine.substring("protected".length);
+        }
+
+        nextLine = nextLine.trim();
+        let isClass = nextLine.startsWith("class ");
+
+        if (!isClass) {
+          isStatic = nextLine.startsWith("static ");
+          if (isStatic) {
+            nextLine.substring("static ".length);
           }
-        );
-        if (!newCode) {
-          (result.startIndex as any) = prefixStart;
-          (result.stopIndex as any) = prefixEnd;
-          (result.code as any) = newCode || "";
-          return false;
         }
 
-        (result.startIndex as any) = prefixStart;
-        (result.stopIndex as any) = nextLineEnd;
-        (result.code as any) = newCode || "";
-        return true;
-      }
-    };
+        if (isClass) {
+          nextLine = nextLine.substring("class ".length);
+          // TODO: object pooling
+          await (decoratorFunc as DesignTimeClassFunction<any>)({
+            className: nextLine.substring(0, nextLine.indexOf(" ")),
+            args: argList,
+            metadata: result,
+          } as DesignTimeClass);
+          return false;
+        } else {
+          // let colon
+          let typeSeparatorIndex = nextLine.indexOf(":");
+          let key = nextLine.substring(0, typeSeparatorIndex).trim();
+          let typeName = nextLine.substring(typeSeparatorIndex + 1).trim();
 
-    decoratorFunctions[i] = processDecorator;
-  }
+          let semicolonIndex = typeName.indexOf(";");
+          if (semicolonIndex > -1) {
+            typeName = typeName.substring(0, semicolonIndex);
+          }
 
-  return {
-    process: async (code: string, filePath: string) => {
-      let startIndex = -1;
-      let symbolI = code.lastIndexOf("@") - 1;
-      let _prefixI = -1;
-      if (symbolI < -1) return { contents: code, note: null };
-      if (symbolI < 0) symbolI = 0;
+          (result.code as any) = code;
+          // TODO: object pooling
+          const newCode = await (decoratorFunc as DesignTimePropertyDecoratorFunction<any>)(
+            {
+              key,
+              type: typeName,
+              args: argList,
+              isStatic,
+              qualifier,
+              metadata: result,
+            }
+          );
+          if (!newCode && newCode !== "") {
+            (result.startIndex as any) = prefixStart;
+            (result.stopIndex as any) = prefixEnd;
+            (result.code as any) = newCode || "";
+            return false;
+          }
 
-      let result = {
-        code,
-        originalSource: code,
-        filePath,
-        startIndex: -1,
-        stopIndex: -1,
+          (result.startIndex as any) = prefixStart - 1;
+          (result.stopIndex as any) = nextLineEnd - 1;
+          (result.code as any) = newCode || "";
+          return true;
+        }
       };
 
-      let prefixI = -1;
-      for (_prefixI = 0; _prefixI < decoratorPrefixes.length; _prefixI++) {
-        result.startIndex = code.indexOf(decoratorPrefixes[_prefixI], symbolI);
-        if (result.startIndex > -1) {
-          prefixI = _prefixI;
-          break;
-        }
-      }
+      decoratorFunctions[i] = processDecorator;
+    }
+    fileMapping[path.basename(moduleName, path.extname(moduleName))] = {
+      decoratorFunctions,
+      decoratorPrefixes,
+    };
+    decoratorPrefixes.forEach((prefix) => allPrefixes.add(prefix));
+  }
 
-      let prefix = "";
+  const modulesToCheck = Object.keys(fileMapping);
+  return {
+    process: async (code: string, filePath: string) => {
+      for (let decoratorModuleName of modulesToCheck) {
+        // There's gotta be a faster & less hacky way to do this without a full AST.
+        if (!code.includes(decoratorModuleName)) continue;
 
-      while (prefixI > -1) {
-        prefix = decoratorPrefixes[prefixI];
-        if (result.startIndex > -1) {
-          let _code = result.code;
-          let didChange = false;
-          try {
-            didChange = await decoratorFunctions[prefixI](
-              result.startIndex,
-              result
-            );
-          } catch (exception) {
-            if (exception instanceof ProcessorError) {
-              return {
-                contents: "",
-                note: exception.note,
-              };
-            } else {
-              throw exception;
-            }
-          }
+        const { decoratorFunctions, decoratorPrefixes } = fileMapping[
+          decoratorModuleName
+        ];
+        let startIndex = -1;
+        let symbolI = code.lastIndexOf("@") - 1;
+        let _prefixI = -1;
+        if (symbolI < -1) return { contents: code, note: null };
+        if (symbolI < 0) symbolI = 0;
 
-          if (didChange) {
-            if (result.startIndex > -1 && result.stopIndex > -1) {
-              result.code =
-                _code.substring(0, result.startIndex) +
-                result.code +
-                _code.substring(result.stopIndex);
-            }
-          } else {
-            result.code =
-              _code.substring(0, result.startIndex - 1) +
-              _code.substring(_code.indexOf("\n", result.startIndex));
-          }
+        let result = {
+          code,
+          originalSource: code,
+          filePath,
+          startIndex: -1,
+          stopIndex: -1,
+        };
 
-          result.startIndex = result.stopIndex = -1;
-        }
-
-        prefixI = -1;
+        let prefixI = -1;
         for (_prefixI = 0; _prefixI < decoratorPrefixes.length; _prefixI++) {
-          symbolI = result.code.lastIndexOf("@");
-          if (symbolI === -1) break;
-
-          result.startIndex = result.code.indexOf(
+          result.startIndex = code.indexOf(
             decoratorPrefixes[_prefixI],
             symbolI
           );
@@ -303,14 +273,69 @@ function buildDecoratorProcessor(decorators: DecoratorsMap) {
             break;
           }
         }
-      }
 
-      return {
-        contents: result.code,
-        note: null,
-      };
+        let prefix = "";
+
+        while (prefixI > -1) {
+          prefix = decoratorPrefixes[prefixI];
+          if (result.startIndex > -1) {
+            let _code = result.code;
+            let didChange = false;
+            try {
+              didChange = await decoratorFunctions[prefixI](
+                result.startIndex,
+                result
+              );
+            } catch (exception) {
+              if (exception instanceof ProcessorError) {
+                return {
+                  contents: "",
+                  note: exception.note,
+                };
+              } else {
+                throw exception;
+              }
+            }
+
+            if (didChange) {
+              if (result.startIndex > -1 && result.stopIndex > -1) {
+                result.code =
+                  _code.substring(0, result.startIndex) +
+                  result.code +
+                  _code.substring(result.stopIndex);
+              }
+            } else {
+              result.code =
+                _code.substring(0, result.startIndex - 1) +
+                _code.substring(_code.indexOf("\n", result.startIndex));
+            }
+
+            result.startIndex = result.stopIndex = -1;
+          }
+
+          prefixI = -1;
+          for (_prefixI = 0; _prefixI < decoratorPrefixes.length; _prefixI++) {
+            symbolI = result.code.lastIndexOf("@");
+            if (symbolI === -1) break;
+
+            result.startIndex = result.code.indexOf(
+              decoratorPrefixes[_prefixI],
+              symbolI
+            );
+            if (result.startIndex > -1) {
+              prefixI = _prefixI;
+              break;
+            }
+          }
+        }
+
+        return {
+          contents: result.code,
+          note: null,
+        };
+      }
     },
-    prefixes: decoratorPrefixes,
+    prefixes: [...allPrefixes],
   };
 }
 
@@ -375,7 +400,8 @@ export function plugin(decorators: DecoratorsMap) {
         loader: "tsx",
       };
 
-    const { note, contents: _contents } = await process(contents, args.path);
+    const { note, contents: _contents } =
+      (await process(contents, args.path)) ?? {};
 
     return {
       contents: _contents,
@@ -387,7 +413,6 @@ export function plugin(decorators: DecoratorsMap) {
   }
 
   async function onLoadTS(args): Promise<OnLoadResult> {
-    console.log("LOAD", args.path);
     const contents: string = await fs.promises.readFile(args.path, "utf8");
     if (!isPotentialMatch(contents))
       return {
@@ -395,7 +420,8 @@ export function plugin(decorators: DecoratorsMap) {
         loader: "ts",
       };
 
-    const { note, contents: _contents } = await process(contents, args.path);
+    const { note, contents: _contents } =
+      (await process(contents, args.path)) ?? {};
 
     return {
       contents: _contents,
@@ -479,7 +505,13 @@ export async function load(
   const entryPoints = await decorators(decoratorsGlob, additionalConfig);
   const files = {};
   for (let file of entryPoints) {
-    Object.assign(files, require(file).decorators);
+    Object.assign(files, {
+      [file]: require(path.join(
+        process.cwd(),
+        path.dirname(file),
+        path.basename(file).replace(".ts", ".js")
+      )).decorators,
+    });
   }
 
   return plugin(files);

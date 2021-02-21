@@ -1,4 +1,4 @@
-import { auto, field, type } from "./JSONSchema.decorator";
+import { auto, field, type } from "./GraphQLSchema.decorator";
 
 @type("Person")
 export class Person {

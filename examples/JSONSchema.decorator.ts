@@ -1,7 +1,13 @@
 import fs from "fs";
 import { klass, property, propertyVoid } from "../index";
 
-type SchemaType = "number" | "string" | "boolean";
+type SchemaType = "number" | "string" | "boolean" | "ID";
+const typeMap = {
+  ID: "number",
+  number: "number",
+  string: "string",
+  boolean: "boolean",
+};
 
 type SchemaMap = {
   [key: string]: {
@@ -28,7 +34,7 @@ export const field = property<OptionalPropType>(
     const schema = schemaFileMap[filePath];
 
     schema[key] = {
-      type: schemaType || (type as SchemaType),
+      type: typeMap[schemaType || type] as SchemaType,
     };
 
     if (description?.trim().length) {
@@ -52,7 +58,7 @@ export const auto = propertyVoid(({ key, type, metadata: { filePath } }) => {
   };
 });
 
-export const schema = klass<[string] | undefined>(
+export const type = klass<[string] | undefined>(
   async ({ args: [object], metadata: { filePath } }) => {
     if (!schemaFileMap[filePath]) {
       return;
@@ -76,4 +82,4 @@ export const schema = klass<[string] | undefined>(
   }
 );
 
-export const decorators = { auto, field, schema };
+export const decorators = { auto, field, type };

@@ -25,19 +25,15 @@ build({
     output.warnings.forEach((w) => console.warn(w));
     require("rimraf").sync("./examples/**.js");
     require("rimraf").sync("./examples/**.json");
-    const { plugin } = require("./index.js");
-    const { decorators: buildDecorators } = require("./decorators");
-
+    const { load } = require("./index.js");
     console.log("Building example decorators...");
-    await buildDecorators();
+    const plugin = await load();
 
-    for (let entryPoint of ["./examples/JSONSchema.ts"]) {
-      const outfile = require("path").join(
-        process.cwd(),
-        entryPoint.replace(".ts", ".decorator.js")
-      );
-
-      const { decorators } = require(outfile);
+    for (let entryPoint of [
+      "./examples/JSONSchema.ts",
+      "./examples/Person-GraphQL.ts",
+      "./examples/debugOnlyExample.ts",
+    ]) {
       await build({
         platform: "node",
         entryPoints: [entryPoint],
@@ -46,7 +42,7 @@ build({
         minifySyntax: true,
         format: "cjs",
         sourcemap: "both",
-        plugins: [plugin(decorators)],
+        plugins: [plugin],
       });
       await build({
         platform: "node",
