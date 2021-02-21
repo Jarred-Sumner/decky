@@ -4,6 +4,8 @@ Use experimental decorators with zero runtime cost and without increasing your b
 
 decky strives for full compatiblity with TypeScript, Prettier, and the rest of the JavaScript ecosystem.
 
+![](./demo.gif)
+
 ## Installation
 
 `decky` is an esbuild plugin.
