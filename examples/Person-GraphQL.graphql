@@ -1,0 +1,8 @@
+
+type Person {
+  signUpTimestamp: number
+  username: string
+  # user id number
+  id: ID!
+}
+      

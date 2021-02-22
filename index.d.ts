@@ -7,6 +7,7 @@ declare type DesignTimeProperty<T = any[]> = {
     isStatic?: boolean;
     qualifier?: Qualifier;
     metadata?: DecoratorResult;
+    defaultValue?: string | number | null;
 };
 declare type DesignTimePropertyDecoratorFunction<T> = (property: DesignTimeProperty<T>) => void | any;
 export declare type DesignTimePropertyDecorator<T> = (...args: string[]) => DesignTimePropertyDecoratorFunction<T>;
@@ -36,9 +37,10 @@ export declare function plugin(decorators: DecoratorsMap): {
 declare type OptionalPropertyDescriptor<T> = T extends Exclude<(number | string)[], undefined> ? (...args: T) => PropertyDecorator : void;
 export declare function property<T>(callback: DesignTimePropertyDecoratorFunction<T>): OptionalPropertyDescriptor<T>;
 export declare function propertyVoid(callback: DesignTimePropertyDecoratorFunction<never>): PropertyDecorator;
-export { property as p, propertyVoid as pV };
-export { klass as c };
 export declare function klass<T extends any[] = []>(callback: DesignTimeClassFunction<T>): (...args: T) => ClassDecorator;
+export declare function klassVoid(callback: DesignTimeClassFunction<never>): ClassDecorator;
+export { property as p, propertyVoid as pV };
+export { klass as c, klassVoid as cV };
 export declare function load(decoratorsGlob?: string, additionalConfig?: Partial<BuildOptions>): Promise<{
     name: string;
     setup(build: any): void;

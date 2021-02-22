@@ -165,3 +165,54 @@ TODO example
 ```
 
 ```
+
+#### Performance
+
+TLDR: pretty good
+
+To log timings, set `process.env.DEKCY_TIMINGS` to something truthy.
+
+You can reproduce all the timings mentioned below by running `node build.js` in this project.
+
+For simple files like the Propery Decorator `@debugOnly` example, the numbers look like this:
+
+```bash
+# How long it took to call the @debugOnly decorator
+[decky] debugOnly.debugOnly(): 0.025ms
+# How long it took to parse the section of the file relevant to @debugOnly
+[decky] -> debugOnly: examples/debugOnlyExample.ts: 0.108ms
+# How long it took ducky to process the entire file end-to-end
+[decky] ./examples/debugOnlyExample.ts: 0.288ms
+```
+
+Since `@debugOnly` does very little, its a reasonable approximation of what the cost of `ducky` itself is. End-to-end it took `0.288ms` for decky to process the file. That's honestly faster than I expected at the time of writing.
+
+This is a small file, but what about a larger one?
+
+```bash
+[decky] JSONSchema.field(number): 0.162ms
+[decky] -> field: examples/JSONSchema.ts: 0.336ms
+[decky] JSONSchema.auto(): 0.059ms
+[decky] -> auto: examples/JSONSchema.ts: 0.131ms
+[decky] JSONSchema.field(ID, user id number): 0.02ms
+[decky] -> field: examples/JSONSchema.ts: 0.107ms
+Saved JSON schema to /Users/jarredsumner/Code/decky/examples/JSONSchema.json
+[decky] JSONSchema.type(Person): 1.07ms
+[decky] ./examples/JSONSchema.ts: 2.932ms
+```
+
+For the JSONSchema example, it took `2.932ms`. But, some of that was writing and stringifying JSON – code specific to the JSONSchema example (rather than decky). If we subtract all those function calls:
+
+```
+[decky] JSONSchema.field(number): 0.162ms
+[decky] JSONSchema.field(ID, user id number): 0.02ms
+[decky] JSONSchema.type(Person): 1.07ms
+```
+
+That means it took `2.932ms` - `1.252ms`, or: `1.68ms` for one file with several decorators.
+
+This can be optimized some, feel free to open an issue if you're running into perf issues. Also note that decky eagerly ignores files that don't have any decorators in them.
+
+## Changelog
+
+- `1.1.0`: Rewrite parsing, add logging, fix multiple decorators for same property

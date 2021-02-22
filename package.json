@@ -1,6 +1,6 @@
 {
   "name": "decky",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "keywords": [
     "typescript",
     "experimentalDecorators",
@@ -38,12 +38,15 @@
     "types.d.ts"
   ],
   "dependencies": {
+    "chalk": "^4.1.0",
     "fast-glob": "^3.2.5"
   },
   "optionalDependencies": {
     "esbuild": "^0.8.49"
   },
   "devDependencies": {
+    "es-module-lexer": "^0.4.0",
+    "@types/chalk": "^2.2.0",
     "@types/node": "^14.14.31",
     "jest": "^26.6.3",
     "rimraf": "^3.0.2",

@@ -1,10 +1,16 @@
-const { build } = require("esbuild");
+const { build, transform } = require("esbuild");
 const path = require("path");
 const rimraf = require("rimraf");
+const fs = require("fs");
 
 const defaultExternals = Object.keys(require("./package.json").dependencies)
   .concat(Object.keys(require("./package.json").devDependencies))
   .concat(Object.keys(require("./package.json").optionalDependencies));
+
+if (defaultExternals.includes("es-module-lexer")) {
+  defaultExternals.splice(defaultExternals.indexOf("es-module-lexer"), 1);
+}
+
 const indexExternals = [...defaultExternals];
 const decoratorsExternals = [...defaultExternals];
 
@@ -80,7 +86,8 @@ async function run() {
 
   console.log("Built decorators.mjs");
   console.log("Built decky lib!");
-
+  // process.env.DECKY_VERBOSE = false;
+  process.env.DECKY_TIMINGS = "true";
   require("rimraf").sync("./examples/**.js");
   require("rimraf").sync("./examples/**.json");
   const { load } = require("./index.js");
@@ -92,26 +99,53 @@ async function run() {
     "./examples/Person-GraphQL.ts",
     "./examples/debugOnlyExample.ts",
   ]) {
+    let test = entryPoint.replace(".ts", ".js");
     await build({
       platform: "node",
       entryPoints: [entryPoint],
-      outfile: entryPoint.replace(".ts", ".js"),
+      outfile: test,
       minify: false,
       minifySyntax: true,
       format: "cjs",
       sourcemap: "both",
       plugins: [plugin],
     });
+    let snapshot = entryPoint.replace(".ts", ".orig.js");
     await build({
       platform: "node",
       entryPoints: [entryPoint.replace(".ts", ".orig.ts")],
-      outfile: entryPoint.replace(".ts", ".orig.js"),
+      outfile: snapshot,
       minify: false,
       minifySyntax: true,
       format: "cjs",
       sourcemap: "both",
       plugins: [],
     });
+
+    const testCode = (
+      await transform(await fs.promises.readFile(test, "utf8"), {
+        minify: true,
+        minifyIdentifiers: true,
+        minifySyntax: true,
+        minifyWhitespace: true,
+      })
+    ).code;
+    const snapshotCode = (
+      await transform(await fs.promises.readFile(snapshot, "utf8"), {
+        minify: true,
+        minifyIdentifiers: true,
+        minifySyntax: true,
+        minifyWhitespace: true,
+      })
+    ).code;
+
+    console.assert(
+      testCode === snapshotCode,
+      "expected snapshot to match test for",
+      entryPoint,
+      "but received",
+      { testCode, snapshotCode }
+    );
   }
 }
 

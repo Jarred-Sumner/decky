@@ -10,4 +10,8 @@ export class Person {
 
   @field("number")
   signUpTimestamp: number;
+
+  get signedUpAgo() {
+    return Date.now() - this.signUpTimestamp;
+  }
 }

@@ -1,7 +1,66 @@
-import { BuildOptions, OnLoadResult, PartialNote } from "esbuild";
+import {
+  BuildOptions,
+  OnLoadArgs,
+  OnLoadResult,
+  OnResolveArgs,
+  PartialNote,
+} from "esbuild";
 import * as fs from "fs";
 import { DecoratorType, decorators } from "decky/decorators";
 import * as path from "path";
+import chalk from "chalk";
+
+const esmLexer = require("es-module-lexer");
+
+let hasLoadedLexers = false;
+async function initLexers() {
+  if (hasLoadedLexers) return;
+  await Promise.all([esmLexer.init]);
+  hasLoadedLexers = true;
+}
+
+const VALID_DECORATOR_IMPORT_EXTENSIONS = [
+  ".decorator.ts",
+  ".decorator.tsx",
+  ".decorator",
+  ".decky.ts",
+  ".decky.tsx",
+  ".decky",
+  ".dec.ts",
+  ".dec.tsx",
+  ".dec",
+];
+
+type ESMImport = {
+  // start
+  s: number;
+  // end
+  e: number;
+  // statement start
+  ss: number;
+  // statement end
+  se: number;
+  // is it a dynamic import
+  d: number;
+  // module path
+  n: string;
+};
+
+function filterDecoratorImport(esm: ESMImport, index: number) {
+  return VALID_DECORATOR_IMPORT_EXTENSIONS.includes(
+    path.extname(esm.n).toLowerCase()
+  );
+}
+
+function parseDecoratorImports(code: string, filename: string): ESMImport[] {
+  // This thing parses both imports and exports, which is unnecessary for this use case.
+  // A future TODO if enough people use this thing would be to fork it and remove the code for parsing exports
+  // That would probably make it much faster, but its already pretty quick.
+  const [imports] = esmLexer.parse(code, filename);
+
+  return (imports as ESMImport[]).filter(filterDecoratorImport);
+}
+
 type Qualifier = "public" | "private" | "protected" | null;
 
 type DesignTimeProperty<T = any[]> = {
@@ -11,7 +70,10 @@ type DesignTimeProperty<T = any[]> = {
   isStatic?: boolean;
   qualifier?: Qualifier;
   metadata?: DecoratorResult;
+  defaultValue?: string | number | null;
 };
+
+type UsageMap = Map<string, Set<string>>;
 
 type DesignTimePropertyDecoratorFunction<T> = (
   property: DesignTimeProperty<T>
@@ -82,6 +144,7 @@ class ProcessorError extends Error {
 function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
   const fileMapping = {};
   const allPrefixes = new Set();
+
   for (let moduleName in decoratorsModuleMap) {
     const decorators = decoratorsModuleMap[moduleName];
     if (
@@ -115,10 +178,27 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
         prefixStart,
         result
       ) => {
+        if (globalThis.process.env.DECKY_TIMINGS)
+          console.time(
+            `[decky] -> ${prefix}: ${path.relative(
+              globalThis.process.cwd(),
+              result.filePath
+            )}`
+          );
         let code = result.code;
-        let prefixEnd = prefixStart + length;
+        let prefixEnd = result.stopIndex;
         let argStart = prefixEnd;
-        let lineEnd = code.indexOf("\n", prefixStart);
+        let lineEnd = prefixEnd;
+
+        while (code[lineEnd] !== "\n") {
+          lineEnd++;
+          if (code.length < lineEnd) break;
+        }
+
+        while (code[argStart] !== "(" && argStart < lineEnd) {
+          argStart++;
+        }
+
         let argEnd = -1;
         let argList;
         if (code[argStart++] === "(") {
@@ -162,9 +242,21 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
           argList = [];
         }
         let nextLineStart = lineEnd + 1;
-        let nextLineEnd = code.indexOf("\n", nextLineStart);
-        const originalLine = code.substring(nextLineStart, nextLineEnd).trim();
+        while (
+          code[nextLineStart] === " " ||
+          code[nextLineStart] === ";" ||
+          code[nextLineStart] === "\n"
+        ) {
+          nextLineStart++;
+        }
+
+        let _nextNewline = code.indexOf("\n", nextLineStart);
+        let _nextSemicolon = code.indexOf(";", nextLineStart);
+        let nextLineEnd =
+          (_nextNewline < _nextSemicolon ? _nextNewline : _nextSemicolon) + 1;
+        const originalLine = code.substring(nextLineStart, nextLineEnd);
         let nextLine = originalLine;
+
         let isStatic = false;
         let qualifier: Qualifier = null;
 
@@ -194,33 +286,80 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
         }
 
         if (isClass) {
-          nextLine = nextLine.substring("class ".length);
+          nextLine = nextLine.substring("class ".length).trim();
+          nextLine = nextLine.substring(0, nextLine.indexOf(" ")).trim();
+          if (globalThis.process.env.DECKY_TIMINGS)
+            console.time(
+              `[decky] ${
+                path.basename(moduleName).split(".")[0]
+              }.${prefix}(${argList.join(", ")})`
+            );
           try {
             // TODO: object pooling
             await (decoratorFunc as DesignTimeClassFunction<any>)({
-              className: nextLine.substring(0, nextLine.indexOf(" ")),
+              className: nextLine,
               args: argList,
               metadata: result,
             } as DesignTimeClass);
+
+            (result.stopIndex as any) = nextLineStart;
           } catch (exception) {
             throw new ProcessorError(
               exception.toString() + `\nIn file:\n${result.code}`,
               result.filePath,
               result.code.substring(0, prefixStart).split("\n").length,
               result.code.split("\n")[
-                result.code.substring(0, prefixStart).split("\n").length
+                result.code.substring(0, prefixStart).split("\n").length - 1
               ],
               prefixEnd
             );
+          } finally {
+            if (globalThis.process.env.DECKY_TIMINGS)
+              console.timeEnd(
+                `[decky] ${
+                  path.basename(moduleName).split(".")[0]
+                }.${prefix}(${argList.join(", ")})`
+              );
           }
           return false;
         } else {
-          // let colon
+          let key = nextLine.trim();
+          let typeName = "";
           let typeSeparatorIndex = nextLine.indexOf(":");
-          let key = nextLine.substring(0, typeSeparatorIndex).trim();
-          let typeName = nextLine.substring(typeSeparatorIndex + 1).trim();
+          let equalsIndex = nextLine.indexOf("=");
+          let openParentheses = nextLine.indexOf("(");
+          let defaultValue = undefined;
+
+          if (typeSeparatorIndex > -1) {
+            key = nextLine.substring(0, typeSeparatorIndex).trim();
+            typeName = nextLine.substring(typeSeparatorIndex + 1).trim();
+          }
 
           let semicolonIndex = typeName.indexOf(";");
+
+          // Ignore equals when open parentheses exists, not dealing with parsing that.
+          if (equalsIndex > -1 && openParentheses === -1) {
+            if (key === "") {
+              key = nextLine.substring(0, equalsIndex).trim();
+            }
+            let _defaultValue = nextLine
+              .substring(equalsIndex + 1)
+              .trim()
+              .replace(/;/gm, "")
+              .trim();
+            try {
+              defaultValue = JSON.parse(_defaultValue);
+            } catch (exception) {
+              if (process.env.DECKY_VERBOSE) {
+                console.warn(exception);
+              }
+            }
+
+            if (typeof defaultValue !== "undefined" && typeName === "") {
+              typeName = typeof defaultValue;
+            }
+          }
+
           if (semicolonIndex > -1) {
             typeName = typeName.substring(0, semicolonIndex);
           }
@@ -230,9 +369,7 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
               "Missing name for property below property descriptor",
               result.filePath,
               result.code.substring(0, prefixStart).split("\n").length,
-              result.code.split("\n")[
-                result.code.substring(0, prefixStart).split("\n").length + 1
-              ],
+              nextLine,
               prefixEnd
             );
           }
@@ -240,6 +377,12 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
           (result.code as any) = code;
           // TODO: object pooling
           let newCode: string;
+          if (globalThis.process.env.DECKY_TIMINGS)
+            console.time(
+              `[decky] ${
+                path.basename(moduleName).split(".")[0]
+              }.${prefix}(${argList.join(", ")})`
+            );
           try {
             newCode = await (decoratorFunc as DesignTimePropertyDecoratorFunction<any>)(
               {
@@ -249,6 +392,7 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
                 isStatic,
                 qualifier,
                 metadata: result,
+                defaultValue,
               }
             );
           } catch (exception) {
@@ -261,10 +405,24 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
               ],
               prefixEnd
             );
+          } finally {
+            if (globalThis.process.env.DECKY_TIMINGS)
+              console.timeEnd(
+                `[decky] ${
+                  path.basename(moduleName).split(".")[0]
+                }.${prefix}(${argList.join(", ")})`
+              );
           }
+          if (globalThis.process.env.DECKY_TIMINGS)
+            console.timeEnd(
+              `[decky] -> ${prefix}: ${path.relative(
+                globalThis.process.cwd(),
+                result.filePath
+              )}`
+            );
           if (!newCode && newCode !== "") {
             (result.startIndex as any) = prefixStart;
-            (result.stopIndex as any) = prefixEnd;
+            (result.stopIndex as any) = nextLineStart;
             (result.code as any) = newCode || "";
             return false;
           }
@@ -285,108 +443,179 @@ function buildDecoratorProcessor(decoratorsModuleMap: DecoratorsMap) {
     decoratorPrefixes.forEach((prefix) => allPrefixes.add(prefix));
   }
 
-  const modulesToCheck = Object.keys(fileMapping);
+  const prefixes = [...allPrefixes].sort().reverse();
+
   return {
     process: async (code: string, filePath: string) => {
-      for (let decoratorModuleName of modulesToCheck) {
-        // There's gotta be a faster & less hacky way to do this without a full AST.
-        if (!code.includes(decoratorModuleName)) continue;
-
-        const { decoratorFunctions, decoratorPrefixes } = fileMapping[
-          decoratorModuleName
-        ];
-        let startIndex = -1;
-        let symbolI = code.lastIndexOf("@") - 1;
-        let _prefixI = -1;
-        if (symbolI < -1) return { contents: code, note: null };
-        if (symbolI < 0) symbolI = 0;
-
-        let result = {
-          code,
-          originalSource: code,
+      let moduleImports: ESMImport[];
+      try {
+        moduleImports = parseDecoratorImports(code, filePath);
+      } catch (exception) {
+        throw new ProcessorError(
+          `Import/export parse error: ${exception.toString()}`,
           filePath,
-          startIndex: -1,
-          stopIndex: -1,
-        };
+          0,
+          code,
+          0
+        );
+      }
 
-        let prefixI = -1;
-        for (_prefixI = 0; _prefixI < decoratorPrefixes.length; _prefixI++) {
-          result.startIndex = code.indexOf(
-            decoratorPrefixes[_prefixI],
-            symbolI
-          );
-          if (result.startIndex > -1) {
-            prefixI = _prefixI;
+      const modules = new Array<string>(moduleImports.length);
+      let moduleI = 0;
+      // Remove decorator imports
+      for (let moduleImport of moduleImports) {
+        code =
+          code.substring(0, moduleImport.ss) +
+          " ".repeat(moduleImport.se - moduleImport.ss + 1) +
+          code.substring(moduleImport.se + 1);
+        const name = path.basename(moduleImport.n);
+        if (fileMapping[name]) {
+          modules[moduleI++] = name;
+        }
+      }
+      // 1. Ignore comment lines
+      // 2. Replace double empty lines with single empty lines
+      // 3. Trim trailing/leading whitespace/newlines, but add one newline at the end.
+      // If this needs to be optimized, this code could be turned into one function call done in a single pass probably.
+      code =
+        code
+          .replace(/^\s*\/\/.*\n?$/gm, "")
+          .trim()
+          .split("\n\n")
+          .join("\n")
+          .trim() + "\n";
+      if (globalThis.process.env.DECKY_VERBOSE) console.log(chalk.yellow(code));
+      if (moduleI !== modules.length) {
+        modules.length = moduleI;
+      }
+
+      let result = {
+        code,
+        originalSource: code,
+        filePath,
+        startIndex: -1,
+        stopIndex: -1,
+      };
+
+      let symbolI = code.lastIndexOf("@") - 1;
+      if (symbolI < -1) return { contents: code, note: null };
+      if (symbolI === -1) symbolI++;
+      let _prefixI = -1;
+      let prefixI = -1;
+      let prefix = "";
+      let _code = "";
+      let didChange = false;
+
+      let lastMatchIndex = -1;
+
+      do {
+        symbolI = result.code.lastIndexOf("@");
+        if (symbolI === -1) break;
+        result.startIndex = symbolI;
+        result.stopIndex = result.startIndex + 1;
+        prefix = "0AF";
+        while (result.stopIndex < result.code.length) {
+          result.stopIndex++;
+
+          // Things that end statements in JavaScript:
+          if (
+            result.code[result.stopIndex] === " " ||
+            result.code[result.stopIndex] === "(" ||
+            result.code[result.stopIndex] === "\n" ||
+            result.code[result.stopIndex] === ";" ||
+            result.code[result.stopIndex] === ","
+          ) {
+            prefix = result.code.substring(
+              result.startIndex + 1,
+              result.stopIndex
+            );
+            break;
+          }
+          // TODO: do we need to add a helpful syntax error checker here?
+          // Like if you type @ foo
+          // Hopefully esbuild will just handle that case! thx @evanw
+        }
+
+        // The ultra efficient way to do this would be using a trie!
+        // Only necessary if we get to the point where there are hundreds of decorators
+        let decoratorModuleName;
+        for (let moduleName of modules) {
+          prefixI = fileMapping[moduleName].decoratorPrefixes.indexOf(prefix);
+          if (prefixI > -1) {
+            decoratorModuleName = moduleName;
             break;
           }
         }
 
-        let prefix = "";
-
-        while (prefixI > -1) {
-          prefix = decoratorPrefixes[prefixI];
-          if (result.startIndex > -1) {
-            let _code = result.code;
-            let didChange = false;
-            try {
-              didChange = await decoratorFunctions[prefixI](
-                result.startIndex,
-                result
-              );
-            } catch (exception) {
-              if (exception instanceof ProcessorError) {
-                return {
-                  contents: "",
-                  note: exception.note,
-                };
-              } else {
-                throw exception;
-              }
-            }
-
-            if (didChange) {
-              if (result.startIndex > -1 && result.stopIndex > -1) {
-                result.code =
-                  _code.substring(0, result.startIndex) +
-                  result.code +
-                  _code.substring(result.stopIndex);
-              }
-            } else {
-              result.code =
-                _code.substring(0, result.startIndex - 1) +
-                _code.substring(_code.indexOf("\n", result.startIndex));
-            }
-
-            result.startIndex = result.stopIndex = -1;
-          }
-
-          prefixI = -1;
-          for (_prefixI = 0; _prefixI < decoratorPrefixes.length; _prefixI++) {
-            symbolI = result.code.lastIndexOf("@");
-            if (symbolI === -1) break;
-
-            result.startIndex = result.code.indexOf(
-              decoratorPrefixes[_prefixI],
-              symbolI
-            );
-            if (result.startIndex > -1) {
-              prefixI = _prefixI;
-              break;
-            }
-          }
+        if (prefixI === -1) {
+          // Excited for the github issue that says, "Why is there shrimp in my code??"
+          result.code =
+            result.code.substring(0, symbolI) +
+            "🍤" +
+            result.code.substring(symbolI + 1);
+          continue;
         }
 
-        return {
-          contents: result.code,
-          note: null,
-        };
-      }
+        const { decoratorFunctions } = fileMapping[decoratorModuleName];
+
+        if (result.startIndex > -1 && decoratorFunctions[prefixI]) {
+          _code = result.code;
+          didChange = false;
+          try {
+            didChange = await decoratorFunctions[prefixI](
+              result.startIndex,
+              result
+            );
+          } catch (exception) {
+            if (exception instanceof ProcessorError) {
+              return {
+                contents: "",
+                note: exception.note,
+              };
+            } else {
+              return {
+                contents: "",
+                note: new ProcessorError(
+                  exception.toString(),
+                  filePath,
+                  0,
+                  result.code,
+                  0
+                ).note,
+              };
+            }
+          }
+
+          if (didChange) {
+            if (result.startIndex > -1 && result.stopIndex > -1) {
+              result.code =
+                _code.substring(0, result.startIndex) +
+                result.code +
+                _code.substring(result.stopIndex);
+            }
+          } else {
+            result.code =
+              _code.substring(0, result.startIndex - 1) +
+              _code.substring(result.stopIndex);
+          }
+
+          result.startIndex = result.stopIndex = -1;
+        }
+      } while (symbolI > -1);
+
+      if (globalThis.process.env.DECKY_VERBOSE)
+        console.log(chalk.green(result.code));
+
+      return {
+        contents: result.code.replace(/🍤/gm, "@"),
+        note: null,
+      };
     },
-    prefixes: [...allPrefixes],
+    prefixes,
   };
 }
 
-function onResolveDecorator(args) {
+function onResolveDecorator(args: OnResolveArgs) {
   return {
     path: args.path,
     namespace: "decorator-stub",
@@ -439,41 +668,34 @@ export function plugin(decorators: DecoratorsMap) {
     };
   }
 
-  async function onLoadTSX(args): Promise<OnLoadResult> {
+  async function onLoadCode(args: OnLoadArgs): Promise<OnLoadResult> {
+    const loader = path.extname(args.path).substring(1) as "tsx" | "ts";
+
     let contents: string = await fs.promises.readFile(args.path, "utf8");
     if (!isPotentialMatch(contents))
       return {
         contents,
-        loader: "tsx",
+        loader,
       };
+
+    if (globalThis.process.env.DECKY_TIMINGS)
+      console.time(
+        "[decky] ./" + path.relative(globalThis.process.cwd(), args.path)
+      );
+    await initLexers();
 
     const { note, contents: _contents } =
       (await process(contents, args.path)) ?? {};
 
-    return {
-      contents: _contents,
-      errors: note
-        ? [{ location: note.location, detail: note.text }]
-        : undefined,
-      loader: "tsx",
-    };
-  }
-
-  async function onLoadTS(args): Promise<OnLoadResult> {
-    const contents: string = await fs.promises.readFile(args.path, "utf8");
-    if (!isPotentialMatch(contents))
-      return {
-        contents,
-        loader: "ts",
-      };
-
-    const { note, contents: _contents } =
-      (await process(contents, args.path)) ?? {};
+    if (globalThis.process.env.DECKY_TIMINGS)
+      console.timeEnd(
+        "[decky] ./" + path.relative(globalThis.process.cwd(), args.path)
+      );
 
     return {
       contents: _contents,
       errors: note ? [{ location: note.location, text: note.text }] : undefined,
-      loader: "ts",
+      loader,
     };
   }
 
@@ -481,11 +703,7 @@ export function plugin(decorators: DecoratorsMap) {
     name: "decky",
     setup(build) {
       build.onResolve(
-        { filter: /\.(decorator|dec)\.(ts)$/ },
-        onResolveDecorator
-      );
-      build.onResolve(
-        { filter: /\.(decorator|dec)\.(tsx)$/ },
+        { filter: /\.(decorator|dec|decky)\.(ts|tsx)$/ },
         onResolveDecorator
       );
       build.onResolve({ filter: /^decky$/ }, onResolveStaticDecorators);
@@ -501,8 +719,7 @@ export function plugin(decorators: DecoratorsMap) {
         { filter: /\.(decorator|dec)\.(tsx)$/, namespace: "decorator-stub" },
         onLoadDecoratorStub
       );
-      build.onLoad({ filter: /\.(ts)$/ }, onLoadTS);
-      build.onLoad({ filter: /\.(tsx)$/ }, onLoadTSX);
+      build.onLoad({ filter: /\.(ts|tsx)$/ }, onLoadCode);
     },
   };
 }
@@ -532,9 +749,6 @@ export function propertyVoid(
   } as any;
 }
 
-export { property as p, propertyVoid as pV };
-export { klass as c };
-
 export function klass<T extends any[] = []>(
   callback: DesignTimeClassFunction<T>
 ): (...args: T) => ClassDecorator {
@@ -543,6 +757,18 @@ export function klass<T extends any[] = []>(
     type: DecoratorType.klass,
   };
 }
+
+export function klassVoid(
+  callback: DesignTimeClassFunction<never>
+): ClassDecorator {
+  return <any | void>{
+    callback,
+    type: DecoratorType.klass,
+  };
+}
+
+export { property as p, propertyVoid as pV };
+export { klass as c, klassVoid as cV };
 
 export async function load(
   decoratorsGlob?: string,

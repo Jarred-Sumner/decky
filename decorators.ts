@@ -7,7 +7,7 @@ export enum DecoratorType {
 }
 
 export async function decorators(
-  decoratorGlob = "./**/*.{decorator.ts,dec.ts,decorators.ts,decky.ts}",
+  decoratorGlob = "./**/*.{decorator.ts,dec.ts,decorators.ts,decky.ts,decorator.tsx,dec.tsx,decorators.tsx,decky.tsx}",
   additionalConfig: Partial<esbuild.BuildOptions> = {}
 ): Promise<string[]> {
   const entryPoints = !additionalConfig?.entryPoints?.length
