@@ -166,7 +166,7 @@ TODO example
 
 TLDR: pretty good
 
-To log timings, set `process.env.DEKCY_TIMINGS` to something truthy.
+To log timings, set `process.env.DECKY_TIMINGS` to something truthy.
 
 You can reproduce all the timings mentioned below by running `node build.js` in this project.
 
