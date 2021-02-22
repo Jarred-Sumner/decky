@@ -162,7 +162,7 @@ You can use decky to edit code at build-time or for generating metadata for code
 
 TODO example
 
-#### Performance
+### Performance
 
 TLDR: pretty good
 
