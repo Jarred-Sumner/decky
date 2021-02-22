@@ -167,7 +167,7 @@ TODO example
 
 ### Performance
 
-TLDR: pretty good
+TLDR: not bad
 
 To log timings, set `process.env.DECKY_TIMINGS` to something truthy.
 
