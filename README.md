@@ -107,8 +107,11 @@ Decorator imports are removed during tree-shaking, leaving no trace.
 By default, files that write new decorators need to end in any of these extensions:
 
 - `.decorator.ts`
+- `.decorator.tsx`
 - `.decky.ts`
+- `.decky.tsx`
 - `.dec.ts`
+- `.dec.tsx`
 
 And it needs to export `decorators` which is an object where the `key` is the function name and the value is the decorator function (`property`, `propertyVoid` or `klass`).
 
