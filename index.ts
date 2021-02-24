@@ -645,9 +645,14 @@ function onLoadStaticDecorators(args) {
 
 export function plugin(decorators: DecoratorsMap) {
   const { prefixes, process } = buildDecoratorProcessor(decorators);
+  const prefixesWithAt = (prefixes as string[]).map((a) =>
+    a.startsWith("@") ? a : "@" + a
+  );
 
   function isPotentialMatch(content: string) {
-    for (let prefix of prefixes) {
+    if (!content.includes("@")) return false;
+
+    for (let prefix of prefixesWithAt) {
       if (content.includes(prefix as string)) return true;
     }
 
